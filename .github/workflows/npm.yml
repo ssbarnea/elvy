@@ -1,0 +1,61 @@
+name: npm
+
+on:
+  create:  # is used for publishing to PyPI and TestPyPI
+    tags:  # any tag regardless of its name, no branches
+    - "**"
+  push:  # only publishes pushes to the main branch to TestPyPI
+    branches:  # any integration branch but not tag
+    - "master"
+    - "main"
+  pull_request:
+  release:
+    types:
+    - published  # It seems that you can publish directly without creating
+    - prereleased
+  schedule:
+  - cron: 1 0 * * *  # Run daily at 0:01 UTC
+  # Run every Friday at 18:02 UTC
+  # https://crontab.guru/#2_18_*_*_5
+  # - cron: 2 18 * * 5
+
+jobs:
+  npm:
+    name: ${{ matrix.env.JOB_NAME }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [15.x]
+        env:
+          - JON_NAME: test
+            COMMAND: npm run ci && npm run build --if-present && npm test
+          - JOB_NAME: lint
+            COMMAND: npm run lint
+          - JOB_NAME: dev
+            COMMAND: npm install && npm run dev
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v2
+      with:
+        node-version: ${{ matrix.node-version }}
+    - run: ${{ matrix.env.JOB_NAME }}
+  publish:
+    if: >-  # "create" workflows run separately from "push" & "pull_request"
+        github.event_name == 'release'
+    needs:
+      - test
+      - lint
+      - dev
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    # Setup .npmrc file to publish to npm
+    - uses: actions/setup-node@v2
+      with:
+        node-version: '15.x'
+        registry-url: 'https://registry.npmjs.org'
+    - run: npm install
+    - run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
